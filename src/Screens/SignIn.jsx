@@ -11,42 +11,280 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const { width } = Dimensions.get('window');
+
+// Professional color scheme
+const COLORS = {
+  primary: '#2563EB',
+  primaryDark: '#1D4ED8',
+  secondary: '#64748B',
+  accent: '#0EA5E9',
+  success: '#10B981',
+  error: '#EF4444',
+  warning: '#F59E0B',
+  background: '#FFFFFF',
+  surface: '#F8FAFC',
+  surfaceLight: '#F1F5F9',
+  border: '#E2E8F0',
+  borderFocus: '#3B82F6',
+  text: {
+    primary: '#1E293B',
+    secondary: '#64748B',
+    tertiary: '#94A3B8',
+    inverse: '#FFFFFF',
+  },
+  input: {
+    background: '#FFFFFF',
+    border: '#E2E8F0',
+    borderFocus: '#3B82F6',
+    placeholder: '#94A3B8',
+  },
+};
+
+// Input validation utilities
+const validateEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const validatePassword = (password) => {
+  return password.length >= 8;
+};
+
+// Helper function to extract name from email
+const extractNameFromEmail = (email) => {
+  if (!email) return '';
+  const namePart = email.split('@')[0];
+  // Convert email username to proper name format
+  return namePart
+    .split(/[._-]/) // Split by common separators
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
 
 export default function LoginScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  // State management
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+  });
+  const [formState, setFormState] = useState({
+    showPassword: false,
+    isLoading: false,
+    errors: {},
+  });
 
+  // Input handlers
+  const handleInputChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Clear errors when user starts typing
+    if (formState.errors[field]) {
+      setFormState(prev => ({
+        ...prev,
+        errors: { ...prev.errors, [field]: null }
+      }));
+    }
+  };
+
+  const togglePasswordVisibility = () => {
+    setFormState(prev => ({ ...prev, showPassword: !prev.showPassword }));
+  };
+
+  // Validation
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!validateEmail(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    }
+
+    if (!formData.password) {
+      errors.password = 'Password is required';
+    } else if (!validatePassword(formData.password)) {
+      errors.password = 'Password must be at least 8 characters';
+    }
+
+    setFormState(prev => ({ ...prev, errors }));
+    return Object.keys(errors).length === 0;
+  };
+
+  // Create user data object from signin information
+  const createUserDataFromSignIn = (email, additionalData = {}) => {
+    const extractedName = extractNameFromEmail(email);
+    
+    return {
+      email: email.toLowerCase().trim(),
+      name: additionalData.name || extractedName || 'User',
+      phone: additionalData.phone || '',
+      location: additionalData.location || '',
+      profileImage: additionalData.profileImage || null,
+      signInMethod: 'email',
+      signInDate: new Date().toISOString(),
+      ...additionalData
+    };
+  };
+
+  // Save user session data
+  const saveUserSession = async (userData, authToken = null) => {
+    try {
+      await AsyncStorage.setItem('currentUser', JSON.stringify(userData));
+      if (authToken) {
+        await AsyncStorage.setItem('userToken', authToken);
+      }
+      console.log('User session saved:', userData);
+    } catch (error) {
+      console.log('Error saving user session:', error);
+    }
+  };
+
+  // Login handler
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
+    if (!validateForm()) return;
+
+    setFormState(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      // Simulate API call - replace with your actual authentication API
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // In a real app, you would get user data from your API response
+      // For now, we'll create user data from the email input
+      const userData = createUserDataFromSignIn(formData.email, {
+        // You can add more user data here if returned from your API
+        // name: apiResponse.user.name,
+        // phone: apiResponse.user.phone,
+        // location: apiResponse.user.location,
+        // profileImage: apiResponse.user.profileImage,
+      });
+
+      // Save user session
+      await saveUserSession(userData, 'fake_auth_token_123');
+      
+      // Navigate to main app with user data
+      navigation.navigate('TabLayout', {
+        screen: 'Profile', // Navigate directly to Profile tab
+        params: {
+          userData: userData
+        }
+      });
+
+      // Alternative navigation if you want to go to a different initial screen:
+      // navigation.navigate('TabLayout', { userData });
+      
+    } catch (error) {
+      console.log('Login error:', error);
+      Alert.alert('Login Failed', 'Please check your credentials and try again.');
+    } finally {
+      setFormState(prev => ({ ...prev, isLoading: false }));
     }
+  };
 
-    if (!email.includes('@')) {
-      Alert.alert('Error', 'Please enter a valid email address');
-      return;
+  // Social login handler
+  const handleSocialLogin = async (provider) => {
+    try {
+      setFormState(prev => ({ ...prev, isLoading: true }));
+      
+      // Simulate social login API call
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Mock social login data - replace with actual social login implementation
+      let socialUserData;
+      
+      if (provider === 'Google') {
+        socialUserData = createUserDataFromSignIn('user@gmail.com', {
+          name: 'Google User',
+          profileImage: 'https://lh3.googleusercontent.com/a/default-user=s96-c',
+          signInMethod: 'google'
+        });
+      } else if (provider === 'Apple') {
+        socialUserData = createUserDataFromSignIn('user@icloud.com', {
+          name: 'Apple User',
+          signInMethod: 'apple'
+        });
+      }
+
+      // Save user session
+      await saveUserSession(socialUserData, `${provider.toLowerCase()}_token_123`);
+      
+      // Navigate to main app with social login data
+      navigation.navigate('TabLayout', {
+        screen: 'Profile',
+        params: {
+          userData: socialUserData
+        }
+      });
+      
+    } catch (error) {
+      console.log(`${provider} login error:`, error);
+      Alert.alert(`${provider} Login Failed`, 'Please try again.');
+    } finally {
+      setFormState(prev => ({ ...prev, isLoading: false }));
     }
+  };
 
-    if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters long');
-      return;
-    }
-
-    setIsLoading(true);
-
-    // Simulate API login delay
-    setTimeout(() => {
-      setIsLoading(false);
-      Alert.alert('Success', 'Login successful!');
-      navigation.navigate('HomeScreen');
-    }, 1500);
+  const renderInputField = (field, placeholder, icon, options = {}) => {
+    const hasError = formState.errors[field];
+    const isPassword = field === 'password';
+    
+    return (
+      <View style={styles.inputContainer}>
+        <Text style={styles.inputLabel}>
+          {field.charAt(0).toUpperCase() + field.slice(1)}
+        </Text>
+        <View style={[
+          styles.inputWrapper,
+          hasError && styles.inputWrapperError,
+        ]}>
+          <Ionicons 
+            name={icon} 
+            size={20} 
+            color={hasError ? COLORS.error : COLORS.text.tertiary} 
+            style={styles.inputIcon} 
+          />
+          <TextInput
+            style={styles.textInput}
+            placeholder={placeholder}
+            placeholderTextColor={COLORS.input.placeholder}
+            value={formData[field]}
+            onChangeText={(value) => handleInputChange(field, value)}
+            secureTextEntry={isPassword && !formState.showPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+            {...options}
+          />
+          {isPassword && (
+            <TouchableOpacity
+              onPress={togglePasswordVisibility}
+              style={styles.eyeIcon}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons
+                name={formState.showPassword ? "eye-outline" : "eye-off-outline"}
+                size={20}
+                color={COLORS.text.tertiary}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+        {hasError && (
+          <Text style={styles.errorText}>{formState.errors[field]}</Text>
+        )}
+      </View>
+    );
   };
 
   return (
@@ -55,118 +293,118 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Welcome Back</Text>
-          <View style={styles.placeholder} />
-        </View>
-
-        <View style={styles.content}>
-          {/* Title */}
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>Sign In</Text>
-            <Text style={styles.subtitle}>Sign in to your account</Text>
+        <ScrollView 
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={COLORS.text.primary} />
+            </TouchableOpacity>
           </View>
 
-          {/* Form */}
-          <View style={styles.form}>
-            {/* Email Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Email</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter your email"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-              </View>
+          <View style={styles.content}>
+            {/* Welcome Section */}
+            <View style={styles.welcomeSection}>
+              <Text style={styles.welcomeTitle}>Welcome Back</Text>
+              <Text style={styles.welcomeSubtitle}>
+                Sign in to continue to your account
+              </Text>
             </View>
 
-            {/* Password Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Password</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoCapitalize="none"
-                />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeIcon}
+            {/* Form Section */}
+            <View style={styles.formSection}>
+              {renderInputField(
+                'email',
+                'Enter your email address',
+                'mail-outline',
+                { keyboardType: 'email-address' }
+              )}
+
+              {renderInputField(
+                'password',
+                'Enter your password',
+                'lock-closed-outline'
+              )}
+
+              {/* Forgot Password */}
+              <TouchableOpacity
+                style={styles.forgotPasswordButton}
+                onPress={() => navigation.navigate('ForgotPassword')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              </TouchableOpacity>
+
+              {/* Login Button */}
+              <TouchableOpacity
+                style={[
+                  styles.loginButton,
+                  formState.isLoading && styles.loginButtonDisabled
+                ]}
+                onPress={handleLogin}
+                disabled={formState.isLoading}
+                activeOpacity={0.9}
+              >
+                {formState.isLoading ? (
+                  <ActivityIndicator color={COLORS.text.inverse} size="small" />
+                ) : (
+                  <Text style={styles.loginButtonText}>Sign In</Text>
+                )}
+              </TouchableOpacity>
+
+              {/* Divider */}
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>Or continue with</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {/* Social Login Buttons */}
+              <View style={styles.socialButtonsContainer}>
+                <TouchableOpacity 
+                  style={styles.socialButton}
+                  onPress={() => handleSocialLogin('Google')}
+                  activeOpacity={0.9}
+                  disabled={formState.isLoading}
                 >
-                  <Ionicons
-                    name={showPassword ? "eye-outline" : "eye-off-outline"}
-                    size={20}
-                    color="#666"
+                  <Image
+                    source={require("../../assets/search.png")}
+                    style={styles.socialIcon}
                   />
+                  <Text style={styles.socialButtonText}>Google</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.socialButton}
+                  onPress={() => handleSocialLogin('Apple')}
+                  activeOpacity={0.9}
+                  disabled={formState.isLoading}
+                >
+                  <Ionicons name="logo-apple" size={20} color={COLORS.text.primary} />
+                  <Text style={styles.socialButtonText}>Apple</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Sign Up Link */}
+              <View style={styles.signUpContainer}>
+                <Text style={styles.signUpText}>Don't have an account? </Text>
+                <TouchableOpacity 
+                  onPress={() => navigation.navigate('SignUp')}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Text style={styles.signUpLink}>Sign Up</Text>
                 </TouchableOpacity>
               </View>
             </View>
-
-            {/* Forgot Password */}
-            <TouchableOpacity
-              style={styles.forgotPassword}
-              onPress={() => navigation.navigate('ForgotPassword')}
-            >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-            </TouchableOpacity>
-
-            {/* Login Button */}
-            <TouchableOpacity
-              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Social Login */}
-            <TouchableOpacity style={styles.socialButton}>
-              <View style={styles.socialButtonContainer}>
-                <Image
-                  source={require("../../assets/search.png")}
-                  style={styles.socialIcon}
-                />
-                <Text style={styles.socialButtonText}> Continue with Google</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Sign Up Link */}
-            <View style={styles.signUpContainer}>
-              <Text style={styles.signUpText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
-                <Text style={styles.signUpLink}>Sign Up</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -175,51 +413,46 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#BABDB6',
+    backgroundColor: COLORS.background,
   },
   keyboardView: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingHorizontal: 24,
     paddingBottom: 20,
   },
-  backButton:{
-    padding: 8,
-    marginTop: 50,
-  },
-  headerTitle: {
-    marginTop: 40,
-    fontSize: 25,
-    fontWeight: '600',
-    color: '#333',
-  },
-  placeholder: {
+  backButton: {
     width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
-    paddingHorizontal: 30,
+    paddingHorizontal: 24,
   },
-  titleContainer: {
+  welcomeSection: {
     marginBottom: 40,
-    top: 10,
   },
-  title: {
+  welcomeTitle: {
     fontSize: 32,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '700',
+    color: COLORS.text.primary,
     marginBottom: 8,
+    letterSpacing: -0.5,
   },
-  subtitle: {
+  welcomeSubtitle: {
     fontSize: 16,
-    color: '#666',
+    color: COLORS.text.secondary,
+    lineHeight: 24,
   },
-  form: {
+  formSection: {
     flex: 1,
   },
   inputContainer: {
@@ -228,92 +461,114 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: COLORS.text.primary,
     marginBottom: 8,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E1E5E9',
+    borderWidth: 1.5,
+    borderColor: COLORS.input.border,
     borderRadius: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: COLORS.input.background,
+    minHeight: 56,
+  },
+  inputWrapperError: {
+    borderColor: COLORS.error,
   },
   inputIcon: {
     marginRight: 12,
   },
   textInput: {
     flex: 1,
-    paddingVertical: 16,
     fontSize: 16,
-    color: '#333',
+    color: COLORS.text.primary,
+    paddingVertical: 0,
   },
   eyeIcon: {
     padding: 4,
   },
-  forgotPassword: {
+  errorText: {
+    fontSize: 12,
+    color: COLORS.error,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  forgotPasswordButton: {
     alignSelf: 'flex-end',
-    marginBottom: 30,
+    marginBottom: 32,
+    padding: 4,
   },
   forgotPasswordText: {
-    color: '#549216',
+    color: COLORS.primary,
     fontSize: 14,
-  },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   loginButton: {
-    backgroundColor: '#73D216',
+    backgroundColor: COLORS.primary,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 32,
+    minHeight: 56,
+    justifyContent: 'center',
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
   loginButtonDisabled: {
     opacity: 0.7,
   },
+  loginButtonText: {
+    color: COLORS.text.inverse,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
+    marginBottom: 24,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E1E5E9',
+    backgroundColor: COLORS.border,
   },
   dividerText: {
     marginHorizontal: 16,
-    color: '#666',
+    color: COLORS.text.tertiary,
     fontSize: 14,
+    fontWeight: '500',
   },
-  socialButtonContainer: {
+  socialButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 32,
+    gap: 12,
   },
   socialButton: {
-    borderWidth: 1,
-    borderColor: '#E1E5E9',
-    paddingVertical: 16,
-    borderRadius: 12,
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.background,
+    minHeight: 56,
   },
   socialIcon: {
     width: 20,
     height: 20,
+    marginRight: 8,
   },
   socialButtonText: {
-    color: '#333',
+    color: COLORS.text.primary,
     fontSize: 16,
     fontWeight: '500',
   },
@@ -321,13 +576,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: 32,
   },
   signUpText: {
-    color: '#666',
+    color: COLORS.text.secondary,
     fontSize: 14,
   },
   signUpLink: {
-    color: '#549216',
+    color: COLORS.primary,
     fontSize: 14,
     fontWeight: '600',
   },
